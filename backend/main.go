@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intel AMX Demo – AVX2 vs Scalar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Intel+Clear:wght@300;400;700&family=IBM+Plex+Mono:wght@400;600&family=Barlow:ital,wght@0,300;0,400;0,600;0,700;1,300&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --intel-blue: #0068b5;
+            --intel-blue-dark: #004f8c;
+            --intel-blue-light: #00aeef;
+            --intel-black: #0a0a0a;
+            --intel-white: #ffffff;
+            --intel-gray-100: #f4f6f8;
+            --intel-gray-200: #e0e5ea;
+            --intel-gray-400: #8c9bab;
+            --intel-gray-600: #4a5568;
+            --intel-gray-800: #1a202c;
+            --accent-green: #00c896;
+            --accent-orange: #ff6b2b;
+            --accent-purple: #7c3aed;
+            --font-display: 'Barlow', sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
+            --radius: 4px;
+            --radius-lg: 8px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-display);
+            background: var(--intel-gray-100);
+            color: var(--intel-gray-800);
+            min-height: 100vh;
+        }
+
+        /* ─── HEADER ─── */
+        .header {
+            background: var(--intel-black);
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 2px solid var(--intel-blue);
+        }
+
+        .header-inner {
+            max-width: 1300px;
+            margin: auto;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding: 12px 32px;
+        }
+
+        /* Logo slot */
+        .logo-slot {
+            height: 40px;
+            min-width: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-slot img {
+            height: 40px;
+            width: auto;
+            display: block;
+        }
+
+        .header-divider {
+            width: 1px;
+            height: 32px;
+            background: var(--intel-gray-600);
+        }
+
+        .header-title {
+            flex: 1;
+        }
+
+        .header-title h1 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--intel-white);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .header-title p {
+            font-size: 0.75rem;
+            color: var(--intel-blue-light);
+            font-weight: 300;
+            margin-top: 1px;
+            font-family: var(--font-mono);
+        }
+
+        .header-badge {
+            background: var(--intel-blue);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 2px;
+        }
+
+        /* ─── MAIN WRAPPER ─── */
+        .wrapper {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 32px 32px 60px;
+        }
+
+        /* ─── TABS ─── */
+        .tabs-bar {
+            display: flex;
+            gap: 2px;
+            background: var(--intel-gray-200);
+            border-radius: var(--radius);
+            padding: 3px;
+            margin-bottom: 28px;
+            width: fit-content;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            padding: 8px 22px;
+            font-family: var(--font-display);
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--intel-gray-600);
+            cursor: pointer;
+            border-radius: var(--radius);
+            transition: all 0.18s ease;
+        }
+
+        .tab-btn.active {
+            background: var(--intel-blue);
+            color: white;
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: var(--intel-gray-200);
+            color: var(--intel-blue);
+        }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* ─── UPLOAD / PREDICT AREA ─── */
+        .control-panel {
+            background: white;
+            border: 1px solid var(--intel-gray-200);
+            border-radius: var(--radius-lg);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .control-panel label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--intel-gray-600);
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .file-input, .symbol-input, .period-select {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            padding: 9px 13px;
+            border: 1px solid var(--intel-gray-200);
+            border-radius: var(--radius);
+            color: var(--intel-gray-800);
+            background: var(--intel-gray-100);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .file-input:focus, .symbol-input:focus, .period-select:focus {
+            border-color: var(--intel-blue);
+        }
+
+        .symbol-input { width: 160px; }
+        .period-select { width: 160px; }
+
+        .run-btn {
+            background: var(--intel-blue);
+            color: white;
+            border: none;
+            padding: 10px 28px;
+            border-radius: var(--radius);
+            font-family: var(--font-display);
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+
+        .run-btn:hover { background: var(--intel-blue-dark); }
+        .run-btn:active { transform: scale(0.98); }
+
+        .status-msg {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--intel-gray-600);
+            padding: 8px 14px;
+            background: var(--intel-gray-100);
+            border-left: 3px solid var(--intel-blue-light);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        /* ─── SECTION TITLE ─── */
+        .section-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--intel-blue);
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--intel-gray-200);
+        }
+
+        /* ─── IMAGE CARDS ─── */
+        .images-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .image-card {
+            flex: 1;
+            min-width: 260px;
+            background: white;
+            border: 1px solid var(--intel-gray-200);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .image-card-header {
+            background: var(--intel-gray-100);
+            padding: 10px 16px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--intel-gray-600);
+            border-bottom: 1px solid var(--intel-gray-200);
+        }
+
+        .image-card img {
+            display: block;
+            max-width: 100%;
+            max-height: 260px;
+            margin: 16px auto;
+            border-radius: var(--radius);
+        }
+
+        /* ─── STAT BOXES ─── */
+        .stats-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .stat-box {
+            flex: 1;
+            min-width: 130px;
+            background: white;
+            border: 1px solid var(--intel-gray-200);
+            border-radius: var(--radius-lg);
+            padding: 16px 18px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--intel-blue);
+        }
+
+        .stat-number {
+            font-family: var(--font-mono);
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: var(--intel-blue);
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--intel-gray-600);
+        }
+
+        /* ─── PREDICTION CARD ─── */
+        .prediction-card {
+            background: var(--intel-blue);
+            border-radius: var(--radius-lg);
+            padding: 24px 32px;
+            text-align: center;
+            margin-bottom: 24px;
+            max-width: 380px;
+            color: white;
+        }
+
+        .prediction-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .prediction-value {
+            font-family: var(--font-mono);
+            font-size: 2.8rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+
+        .prediction-meta {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-top: 8px;
+            font-family: var(--font-mono);
+        }
+
+        /* ─── CHARTS ─── */
+        .charts-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .chart-card {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border: 1px solid var(--intel-gray-200);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+        }
+
+        /* ─── TABLE ─── */
+        .table-card {
+            background: white;
+            border: 1px solid var(--intel-gray-200);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: var(--intel-gray-800);
+            color: white;
+            padding: 11px 16px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+            font-family: var(--font-display);
+        }
+
+        td {
+            padding: 10px 16px;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 0.84rem;
+            border-bottom: 1px solid var(--intel-gray-200);
+            color: var(--intel-gray-800);
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) td { background: var(--intel-gray-100); }
+
+        td:first-child {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 0.8rem;
+            letter-spacing: 0.04em;
+            color: var(--intel-blue-dark);
+            text-align: left;
+        }
+
+        /* ─── FOOTER ─── */
+        .footer {
+            text-align: center;
+            padding: 18px;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--intel-gray-400);
+            border-top: 1px solid var(--intel-gray-200);
+            background: white;
+            letter-spacing: 0.04em;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ─── HEADER ─── -->
+<header class="header">
+    <div class="header-inner">
+        <!-- Inserta aquí el logo: reemplaza "logo.png" con la ruta de tu imagen -->
+        <div class="logo-slot">
+            <img src="logo.png" alt="Logo" onerror="this.style.display='none'">
+        </div>
+
+        <div class="header-divider"></div>
+
+        <div class="header-title">
+            <h1>AMX Demo &mdash; AVX2 vs Escalar</h1>
+            <p>Procesamiento de Imágenes &amp; Predicción AR</p>
+        </div>
+
+        <div class="header-badge">Live Benchmark</div>
+    </div>
+</header>
+
+<!-- ─── MAIN ─── -->
+<main class="wrapper">
+
+    <!-- Tabs -->
+    <div class="tabs-bar">
+        <button class="tab-btn active" data-tab="img">Procesamiento de Imágenes</button>
+        <button class="tab-btn" data-tab="stock">Predicción de Acciones</button>
+    </div>
+
+    <!-- ═══ TAB: IMÁGENES ═══ -->
+    <div id="imgTab" class="tab-pane active">
+
+        <div class="control-panel">
+            <div>
+                <label for="imageInput">Imagen de entrada</label>
+                <input type="file" id="imageInput" class="file-input" accept="image/png,image/jpeg,image/jpg">
+            </div>
+            <button class="run-btn" id="uploadBtn">Ejecutar Benchmark</button>
+            <div class="status-msg" id="imgStatus">Selecciona una imagen PNG o JPEG y pulsa Ejecutar Benchmark.</div>
+        </div>
+
+        <div id="imgResults" style="display:none;">
+
+            <p class="section-title">Resultado de Umbralización</p>
+            <div class="images-row">
+                <div class="image-card">
+                    <div class="image-card-header">Máscara — C++ Escalar</div>
+                    <img id="imgCpp" alt="Mask C++">
+                </div>
+                <div class="image-card">
+                    <div class="image-card-header">Máscara — AVX2</div>
+                    <img id="imgAvx" alt="Mask AVX2">
+                </div>
+            </div>
+
+            <p class="section-title">Estadísticas de Rendimiento</p>
+            <div class="stats-row" id="imgStats"></div>
+
+            <p class="section-title">Distribución de Tiempos</p>
+            <div class="charts-row">
+                <div class="chart-card"><canvas id="imgScatterChart"></canvas></div>
+                <div class="chart-card"><canvas id="imgBarChart"></canvas></div>
+            </div>
+
+            <p class="section-title">Tabla Comparativa</p>
+            <div class="table-card" id="imgTable"></div>
+
+        </div>
+    </div>
+
+    <!-- ═══ TAB: ACCIONES ═══ -->
+    <div id="stockTab" class="tab-pane">
+
+        <div class="control-panel">
+            <div>
+                <label>Símbolo</label>
+                <input type="text" id="symbolInput" class="symbol-input" placeholder="Ej: AAPL" value="AAPL">
+            </div>
+            <div>
+                <label>Período histórico</label>
+                <select id="periodSelect" class="period-select">
+                    <option value="30">1 mes</option>
+                    <option value="90">3 meses</option>
+                    <option value="180">6 meses</option>
+                    <option value="365">1 año</option>
+                    <option value="730">2 años</option>
+                    <option value="0">Máximo histórico</option>
+                </select>
+            </div>
+            <button class="run-btn" id="predictBtn">Predecir y Benchmark</button>
+            <div class="status-msg" id="stockStatus">Ingresa el símbolo, selecciona el período y pulsa el botón.</div>
+        </div>
+
+        <div id="stockResults" style="display:none;">
+
+            <div class="prediction-card">
+                <div class="prediction-label">Precio estimado — Próximo cierre</div>
+                <div class="prediction-value" id="predictionValue">--</div>
+                <div class="prediction-meta" id="dataPointsInfo"></div>
+            </div>
+
+            <p class="section-title">Parámetros de Regresión</p>
+            <div class="stats-row" id="stockPredStats"></div>
+
+            <p class="section-title">Precio Real vs Ajustado</p>
+            <div class="charts-row">
+                <div class="chart-card"><canvas id="stockLineChart"></canvas></div>
+                <div class="chart-card"><canvas id="stockResidualsChart"></canvas></div>
+            </div>
+
+            <p class="section-title">Benchmark de Regresión — 500 Iteraciones</p>
+            <div class="charts-row">
+                <div class="chart-card"><canvas id="stockBenchScatter"></canvas></div>
+                <div class="chart-card"><canvas id="stockBenchBar"></canvas></div>
+            </div>
+            <div class="table-card" id="stockBenchTable"></div>
+
+        </div>
+    </div>
+
+</main>
+
+<footer class="footer">
+    Tiempos registrados sobre 500 iteraciones en microsegundos — Intel AVX2 vs C++ Escalar
+</footer>
+
+<script>
+    // ─── TABS ───
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-tab');
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('imgTab').classList.toggle('active', tab === 'img');
+            document.getElementById('stockTab').classList.toggle('active', tab === 'stock');
+        });
+    });
+
+    // ─── IMÁGENES ───
+    const uploadBtn = document.getElementById('uploadBtn');
+    const imageInput = document.getElementById('imageInput');
+    const imgStatus = document.getElementById('imgStatus');
+    const imgResultsDiv = document.getElementById('imgResults');
+    let scatterChart = null, barChart = null;
+
+    // Limpiar el input al cargar la página para que no muestre ningún archivo previo
+    imageInput.value = '';
+
+    // El botón SOLO ejecuta el benchmark; el input file es independiente
+    uploadBtn.addEventListener('click', async () => {
+        const file = imageInput.files[0];
+        if (!file) {
+            imgStatus.textContent = 'Primero selecciona una imagen con el selector de archivos.';
+            return;
+        }
+        imgStatus.textContent = 'Procesando imagen y ejecutando benchmark...';
+        imgResultsDiv.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al procesar imagen');
+
+            // El servidor devuelve: data.images.mask_cpp y data.images.mask_avx
+            document.getElementById('imgCpp').src = 'data:image/png;base64,' + data.images.mask_cpp;
+            document.getElementById('imgAvx').src = 'data:image/png;base64,' + data.images.mask_avx;
+
+            // data.stats.cpp.mean / data.stats.avx.mean
+            const s = data.stats;
+            const speedup = (s.cpp.mean / s.avx.mean).toFixed(2);
+            document.getElementById('imgStats').innerHTML = `
+                <div class="stat-box"><div class="stat-number">${speedup}x</div><div class="stat-label">Aceleración AVX2</div></div>
+                <div class="stat-box"><div class="stat-number">${s.cpp.mean.toFixed(1)}</div><div class="stat-label">C++ Media (µs)</div></div>
+                <div class="stat-box"><div class="stat-number">${s.cpp.min.toFixed(1)}</div><div class="stat-label">C++ Mínimo (µs)</div></div>
+                <div class="stat-box"><div class="stat-number">${s.avx.mean.toFixed(1)}</div><div class="stat-label">AVX2 Media (µs)</div></div>
+                <div class="stat-box"><div class="stat-number">${s.avx.min.toFixed(1)}</div><div class="stat-label">AVX2 Mínimo (µs)</div></div>
+            `;
+
+            // Los arrays de tiempos vienen en data.cppTimes y data.avxTimes (raíz del JSON)
+            renderImgScatter(data.cppTimes, data.avxTimes);
+            renderImgBar(s);
+            renderImgTable(s);
+            imgResultsDiv.style.display = 'block';
+            imgStatus.textContent = 'Benchmark completado.';
+        } catch(err) {
+            imgStatus.textContent = 'Error: ' + err.message;
+            console.error(err);
+        }
+    });
+
+    function renderImgScatter(cppTimes, avxTimes) {
+        const ctx = document.getElementById('imgScatterChart').getContext('2d');
+        if (scatterChart) scatterChart.destroy();
+
+        const n = Math.max((cppTimes || []).length, (avxTimes || []).length);
+        if (n === 0) {
+            ctx.canvas.parentElement.innerHTML = '<p style="padding:20px;color:#8c9bab;font-family:IBM Plex Mono;font-size:0.8rem;text-align:center;">Sin datos de tiempos disponibles.</p>';
+            return;
+        }
+
+        scatterChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({ length: n }, (_, i) => i + 1),
+                datasets: [
+                    { label: 'C++ Escalar (µs)', data: cppTimes, borderColor: '#ff6b2b', backgroundColor: 'transparent', fill: false, pointRadius: 1, tension: 0.1 },
+                    { label: 'AVX2 (µs)',         data: avxTimes, borderColor: '#0068b5', backgroundColor: 'transparent', fill: false, pointRadius: 1, tension: 0.1 }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { font: { family: 'IBM Plex Mono', size: 11 } } },
+                    title: { display: true, text: 'Tiempos por iteración', font: { family: 'Barlow', size: 12 } }
+                },
+                scales: {
+                    x: { title: { display: true, text: 'Iteración' } },
+                    y: { title: { display: true, text: 'Microsegundos (µs)' } }
+                }
+            }
+        });
+    }
+
+    function renderImgBar(stats) {
+        const ctx = document.getElementById('imgBarChart').getContext('2d');
+        if (barChart) barChart.destroy();
+        barChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['C++ Escalar', 'AVX2'],
+                datasets: [{ label: 'Tiempo medio (µs)', data: [stats.cpp.mean, stats.avx.mean], backgroundColor: ['#ff6b2b', '#0068b5'] }]
+            },
+            options: {
+                responsive: true,
+                plugins: { title: { display: true, text: 'Comparativa de medias', font: { family: 'Barlow', size: 12 } } },
+                scales: { y: { beginAtZero: true, title: { display: true, text: 'Microsegundos (µs)' } } }
+            }
+        });
+    }
+
+    function renderImgTable(stats) {
+        document.getElementById('imgTable').innerHTML = `
+            <table>
+                <tr><th>Implementación</th><th>Media (µs)</th><th>Mínimo (µs)</th><th>Máximo (µs)</th></tr>
+                <tr><td>C++ Escalar</td><td>${stats.cpp.mean.toFixed(2)}</td><td>${stats.cpp.min.toFixed(2)}</td><td>${stats.cpp.max.toFixed(2)}</td></tr>
+                <tr><td>AVX2</td><td>${stats.avx.mean.toFixed(2)}</td><td>${stats.avx.min.toFixed(2)}</td><td>${stats.avx.max.toFixed(2)}</td></tr>
+            </table>`;
+    }
+
+    // ─── ACCIONES ───
+    const predictBtn = document.getElementById('predictBtn');
+    const symbolInput = document.getElementById('symbolInput');
+    const periodSelect = document.getElementById('periodSelect');
+    const stockStatus = document.getElementById('stockStatus');
+    const stockResultsDiv = document.getElementById('stockResults');
+    let lineChart = null, residualsChart = null, benchScatter = null, benchBar = null;
+
+    predictBtn.addEventListener('click', async () => {
+        const symbol = symbolInput.value.trim().toUpperCase();
+        if (!symbol) { stockStatus.textContent = 'Ingrese un símbolo válido.'; return; }
+        let days = parseInt(periodSelect.value, 10);
+        if (isNaN(days)) days = 365;
+        stockStatus.textContent = `Descargando datos y ejecutando benchmark...`;
+        stockResultsDiv.style.display = 'none';
+        try {
+            const response = await fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol, days })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Error en predicción');
+
+            document.getElementById('predictionValue').textContent = `$${data.prediction.toFixed(2)}`;
+            document.getElementById('dataPointsInfo').textContent = `${data.dataPoints} puntos de cierre analizados`;
+
+            document.getElementById('stockPredStats').innerHTML = `
+                <div class="stat-box"><div class="stat-number">${data.slope.toFixed(6)}</div><div class="stat-label">Pendiente</div></div>
+                <div class="stat-box"><div class="stat-number">${data.intercept.toFixed(4)}</div><div class="stat-label">Intercepto</div></div>
+                <div class="stat-box"><div class="stat-number">${data.rSquared ? data.rSquared.toFixed(4) : 'N/A'}</div><div class="stat-label">R²</div></div>
+            `;
+
+            const ctxLine = document.getElementById('stockLineChart').getContext('2d');
+            if (lineChart) lineChart.destroy();
+            const actual = data.actualPrices, fitted = data.fittedPrices;
+            const idx = actual.map((_, i) => i + 1);
+            lineChart = new Chart(ctxLine, {
+                type: 'line',
+                data: { labels: idx, datasets: [
+                    { label: 'Precio real', data: actual, borderColor: '#0068b5', fill: false, tension: 0.1 },
+                    { label: 'Regresión ajustada', data: fitted, borderColor: '#ff6b2b', borderDash: [5,5], fill: false }
+                ]},
+                options: { responsive: true, plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: $${ctx.raw.toFixed(2)}` } } } }
+            });
+
+            const residuals = actual.map((y, i) => y - fitted[i]);
+            const ctxRes = document.getElementById('stockResidualsChart').getContext('2d');
+            if (residualsChart) residualsChart.destroy();
+            residualsChart = new Chart(ctxRes, {
+                type: 'scatter',
+                data: { datasets: [{ label: 'Residuos', data: residuals.map((r, i) => ({ x: i+1, y: r })), backgroundColor: '#7c3aed', pointRadius: 3 }] },
+                options: { responsive: true, scales: { x: { title: { display: true, text: 'Índice' } }, y: { title: { display: true, text: 'Error (USD)' } } } }
+            });
+
+            if (data.cppTimesReg && data.avxTimesReg && data.cppTimesReg.length) {
+                renderRegBenchmark(data.cppTimesReg, data.avxTimesReg);
+            } else {
+                document.getElementById('stockBenchTable').innerHTML = '<p style="padding:16px;color:#8c9bab;font-family:IBM Plex Mono;font-size:0.8rem;">No se recibieron datos de benchmark de regresión.</p>';
+            }
+            stockResultsDiv.style.display = 'block';
+            stockStatus.textContent = 'Predicción y benchmark completados.';
+        } catch(err) {
+            stockStatus.textContent = 'Error: ' + err.message;
+            console.error(err);
+        }
+    });
+
+    function renderRegBenchmark(cppTimes, avxTimes) {
+        const mean = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+        const cppMean = mean(cppTimes), avxMean = mean(avxTimes);
+        const speedup = (cppMean / avxMean).toFixed(2);
+
+        document.getElementById('stockBenchTable').innerHTML = `
+            <table>
+                <tr><th>Implementación</th><th>Media (µs)</th><th>Mínimo (µs)</th><th>Máximo (µs)</th><th>Aceleración</th></tr>
+                <tr><td>C++ Escalar</td><td>${cppMean.toFixed(2)}</td><td>${Math.min(...cppTimes).toFixed(2)}</td><td>${Math.max(...cppTimes).toFixed(2)}</td><td rowspan="2" style="font-weight:700;color:#0068b5;font-size:1.1rem;">${speedup}x</td></tr>
+                <tr><td>AVX2</td><td>${avxMean.toFixed(2)}</td><td>${Math.min(...avxTimes).toFixed(2)}</td><td>${Math.max(...avxTimes).toFixed(2)}</td></tr>
+            </table>`;
+
+        const labels = Array.from({ length: cppTimes.length }, (_, i) => i+1);
+        const ctxScatter = document.getElementById('stockBenchScatter').getContext('2d');
+        if (benchScatter) benchScatter.destroy();
+        benchScatter = new Chart(ctxScatter, {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'C++ Escalar (µs)', data: cppTimes, borderColor: '#ff6b2b', backgroundColor: 'transparent', fill: false, tension: 0.1, pointRadius: 1 },
+                { label: 'AVX2 (µs)', data: avxTimes, borderColor: '#00c896', backgroundColor: 'transparent', fill: false, tension: 0.1, pointRadius: 1 }
+            ]},
+            options: { responsive: true }
+        });
+
+        const ctxBar = document.getElementById('stockBenchBar').getContext('2d');
+        if (benchBar) benchBar.destroy();
+        benchBar = new Chart(ctxBar, {
+            type: 'bar',
+            data: { labels: ['C++ Escalar', 'AVX2'], datasets: [{ label: 'Tiempo medio (µs)', data: [cppMean, avxMean], backgroundColor: ['#ff6b2b', '#0068b5'] }] },
+            options: { responsive: true, scales: { y: { beginAtZero: true, title: { display: true, text: 'Microsegundos' } } } }
+        });
+    }
+</script>
+</body>
+</html>

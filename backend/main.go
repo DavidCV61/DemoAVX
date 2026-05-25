@@ -5,6 +5,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/draw"
+	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -54,6 +57,22 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	srcImg, _, err := image.Decode(file)
+	if err != nil {
+		sendError(w, "Formato de imagen no soportado: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	bounds := srcImg.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	newWidth := ((width + 31) / 32) * 32
+	newHeight := ((height + 31) / 32) * 32
+
+	dstImg := image.NewGray(image.Rect(0, 0, newWidth, newHeight))
+	draw.Draw(dstImg, image.Rect(0, 0, width, height), srcImg, bounds.Min, draw.Src)
+
 	imagePath := filepath.Join(uploadDir, "ImageA.png")
 	outFile, err := os.Create(imagePath)
 	if err != nil {
@@ -61,8 +80,8 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer outFile.Close()
-	if _, err := io.Copy(outFile, file); err != nil {
-		sendError(w, "Error al escribir imagen: "+err.Error(), http.StatusInternalServerError)
+	if err := png.Encode(outFile, dstImg); err != nil {
+		sendError(w, "Error al codificar imagen: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

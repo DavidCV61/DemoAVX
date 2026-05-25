@@ -1,12 +1,10 @@
-//------------------------------------------------
-//               Ch04_06.cpp
-//------------------------------------------------
-
-#include "Ch04_06.h"
+#include "Demo_01.h"
 #include "ImageMatrix.h"
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
+
+using namespace std;
 
 const char *c_TestImageFileName = "ImageA.png";
 
@@ -18,15 +16,15 @@ int main() {
     ProcessImage_bm();
   }
 
-  catch (std::exception &ex) {
-    std::cout << "Ch04_06 exception: " << ex.what() << '\n';
+  catch (exception &ex) {
+    cout << "Demo_01 exception: " << ex.what() << '\n';
   }
 }
 
 static void ProcessImage(void) {
   const char nl = '\n';
-  const char *fn_mask0 = "Ch04_06_ProcessImage_Mask0.png";
-  const char *fn_mask1 = "Ch04_06_ProcessImage_Mask1.png";
+  const char *fn_mask0 = "Demo_01_ProcessImage_Mask0.png";
+  const char *fn_mask1 = "Demo_01_ProcessImage_Mask1.png";
 
   ImageMatrix im_src(c_TestImageFileName, PixelType::Gray8);
   size_t im_h = im_src.GetHeight();
@@ -57,18 +55,18 @@ static void ProcessImage(void) {
   CalcImageMean_Iavx2(&itd1);
 
   const unsigned int w = 12;
-  std::cout << std::fixed << std::setprecision(4);
-  std::cout << "\nResults for ProcessImage() using file ";
-  std::cout << c_TestImageFileName << nl << nl;
-  std::cout << "                            Cpp         Iavx2\n";
-  std::cout << "---------------------------------------------\n";
-  std::cout << "SumPixelsMasked:   ";
-  std::cout << std::setw(w) << itd0.m_SumMaskedPixels << "  ";
-  std::cout << std::setw(w) << itd1.m_SumMaskedPixels << nl;
-  std::cout << "NumPixelsMasked:   ";
-  std::cout << std::setw(w) << itd0.m_NumMaskedPixels << "  ";
-  std::cout << std::setw(w) << itd1.m_NumMaskedPixels << nl;
-  std::cout << "MeanMaskedPixels:  ";
-  std::cout << std::setw(w) << itd0.m_MeanMaskedPixels << "  ";
-  std::cout << std::setw(w) << itd1.m_MeanMaskedPixels << nl;
+  cout << fixed << setprecision(4);
+  cout << "\nResults for ProcessImage() using file ";
+  cout << c_TestImageFileName << nl << nl;
+  cout << "                            Cpp         Iavx2\n";
+  cout << "---------------------------------------------\n";
+  cout << "SumPixelsMasked:   ";
+  cout << setw(w) << itd0.m_SumMaskedPixels << "  ";
+  cout << setw(w) << itd1.m_SumMaskedPixels << nl;
+  cout << "NumPixelsMasked:   ";
+  cout << setw(w) << itd0.m_NumMaskedPixels << "  ";
+  cout << setw(w) << itd1.m_NumMaskedPixels << nl;
+  cout << "MeanMaskedPixels:  ";
+  cout << setw(w) << itd0.m_MeanMaskedPixels << "  ";
+  cout << setw(w) << itd1.m_MeanMaskedPixels << nl;
 }

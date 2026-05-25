@@ -3,7 +3,7 @@
 //------------------------------------------------
 
 #include "AlignedMem.h"
-#include "Ch04_06.h"
+#include "Demo_01.h"
 
 bool CheckArgs(size_t num_pixels, const uint8_t *pb_src,
                const uint8_t *pb_mask) {

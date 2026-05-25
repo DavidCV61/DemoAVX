@@ -10,20 +10,20 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build/cpp
 COPY cpp/ .
 
-# Compilar Ch04_06 (enlace estático de libstdc++)
+# Compilar demo_01 (umbralización de imágenes)
 RUN g++ -std=c++17 -O3 -mavx2 -mfma -static-libstdc++ \
-    Ch04_06.cpp \
-    Ch04_06_bm.cpp \
-    Ch04_06_fcpp.cpp \
-    Ch04_06_misc.cpp \
-    -pthread -lpng -o Ch04_06
+    Demo_01.cpp \
+    Demo_01_bm.cpp \
+    Demo_01_funciones.cpp \
+    Demo_01_misc.cpp \
+    -pthread -lpng -o demo_01
 
-# Compilar Ch05_01 (enlace estático de libstdc++)
+# Compilar demo_02 (regresión lineal)
 RUN g++ -std=c++17 -O3 -mavx2 -mfma -static-libstdc++ \
-    Ch05_01.cpp \
-    Ch05_01_fcpp.cpp \
-    Ch05_01_misc.cpp \
-    -pthread -lpng -o Ch05_01
+    Demo_02.cpp \
+    Demo_02_funciones.cpp \
+    Demo_02_misc.cpp \
+    -lm -o demo_02
 
 # ================= ETAPA 2: Compilar servidor Go =================
 FROM golang:1.21-alpine AS go-builder
@@ -38,7 +38,6 @@ RUN go mod init backend 2>/dev/null || true && \
 # ================= ETAPA 3: Imagen final =================
 FROM ubuntu:22.04
 
-# Solo dependencias runtime necesarias (libpng, CA certs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libpng16-16 \
@@ -46,16 +45,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copiar binarios C++ (con libstdc++ estática)
-COPY --from=cpp-builder /build/cpp/Ch04_06 ./
-COPY --from=cpp-builder /build/cpp/Ch05_01 ./
-RUN chmod +x Ch04_06 Ch05_01
+# Copiar binarios C++ (enlace estático de libstdc++)
+COPY --from=cpp-builder /build/cpp/demo_01 ./
+COPY --from=cpp-builder /build/cpp/demo_02 ./
+RUN chmod +x demo_01 demo_02
 
-# Copiar servidor Go y estáticos
+# Copiar servidor Go y archivos estáticos
 COPY --from=go-builder /build/backend/server ./backend/
 COPY backend/static ./backend/static/
 
-# Crear directorio de uploads
+# Crear directorio de uploads (será ../uploads desde backend)
 RUN mkdir -p /app/uploads && chmod 777 /app/uploads
 
 # Usuario no root

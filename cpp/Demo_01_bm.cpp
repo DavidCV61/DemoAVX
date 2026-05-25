@@ -1,9 +1,5 @@
-//------------------------------------------------
-//               Ch04_06_bm.cpp
-//------------------------------------------------
-
 #include "BmThreadTimer.h"
-#include "Ch04_06.h"
+#include "Demo_01.h"
 #include "ImageMatrix.h"
 #include <string>
 

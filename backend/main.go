@@ -18,9 +18,13 @@ import (
 )
 
 const (
-	uploadDir   = "../uploads"
-	cppBinary   = "../Ch04_06" // binario para umbralización de imágenes
-	cppLSBinary = "../Ch05_01" // binario para regresión lineal (con benchmark fijo)
+	uploadDir     = "../uploads"
+	cppBinary     = "../demo_01"
+	cppLSBinary   = "../demo_02"
+	maskCppFile   = "Demo_01_ProcessImage_Mask0.png"
+	maskAvxFile   = "Demo_01_ProcessImage_Mask1.png"
+	benchmarkFile = "benchmark.csv"
+	benchmarkLS   = "benchmark_ls.csv"
 )
 
 func main() {
@@ -34,11 +38,10 @@ func main() {
 	http.HandleFunc("/cpu", cpuHandler)
 
 	port := ":8080"
-	fmt.Printf("🚀 Servidor iniciado en http://localhost%s\n", port)
+	fmt.Printf("Servidor iniciado en http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, nil))
 }
 
-// ---------- Procesamiento de imágenes (umbralización) ----------
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
@@ -63,33 +66,30 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ejecutar binario de imágenes (genera máscaras y benchmark.csv)
 	cmd := exec.Command(cppBinary)
 	cmd.Dir = uploadDir
 	output, err := cmd.CombinedOutput()
-	log.Printf("Salida del binario de imágenes:\n%s", output)
+	log.Printf("Salida de demo_01:\n%s", output)
 	if err != nil {
-		sendError(w, fmt.Sprintf("Error ejecutando benchmark: %v\n%s", err, output), http.StatusInternalServerError)
+		sendError(w, fmt.Sprintf("Error ejecutando demo_01: %v\n%s", err, output), http.StatusInternalServerError)
 		return
 	}
 
-	// Leer CSV de benchmark (benchmark.csv)
-	csvPath := filepath.Join(uploadDir, "benchmark.csv")
+	csvPath := filepath.Join(uploadDir, benchmarkFile)
 	if _, err := os.Stat(csvPath); os.IsNotExist(err) {
-		sendError(w, "No se encontró benchmark.csv", http.StatusInternalServerError)
+		sendError(w, "No se encontró "+benchmarkFile, http.StatusInternalServerError)
 		return
 	}
 	cppTimes, avxTimes, err := readBenchmarkCSV(csvPath)
 	if err != nil {
-		log.Printf("Error leyendo benchmark.csv: %v", err)
+		log.Printf("Error leyendo %s: %v", benchmarkFile, err)
 		cppTimes = []float64{}
 		avxTimes = []float64{}
 	}
 	stats := computeStatsFromArrays(cppTimes, avxTimes)
 
-	// Leer máscaras generadas
-	maskCppPath := filepath.Join(uploadDir, "Ch04_06_ProcessImage_Mask0.png")
-	maskAvxPath := filepath.Join(uploadDir, "Ch04_06_ProcessImage_Mask1.png")
+	maskCppPath := filepath.Join(uploadDir, maskCppFile)
+	maskAvxPath := filepath.Join(uploadDir, maskAvxFile)
 	maskCppBase64, err := imageToBase64(maskCppPath)
 	if err != nil {
 		sendError(w, "Error leyendo máscara C++: "+err.Error(), http.StatusInternalServerError)
@@ -114,7 +114,6 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// ---------- Predicción de acciones (regresión AR(1) con selector de período) ----------
 func predictHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
@@ -122,7 +121,7 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Symbol string `json:"symbol"`
-		Days   int    `json:"days"` // días hacia atrás, 0 = máximo histórico
+		Days   int    `json:"days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendError(w, "JSON inválido: "+err.Error(), http.StatusBadRequest)
@@ -135,10 +134,9 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	days := req.Days
 	if days < 0 {
-		days = 365 // valor por defecto seguro
+		days = 365
 	}
 
-	// 1. Descargar datos históricos con el período seleccionado
 	prices, err := fetchYahooPrices(symbol, days)
 	if err != nil {
 		sendError(w, "Error descargando datos: "+err.Error(), http.StatusInternalServerError)
@@ -150,7 +148,6 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	dataPoints := len(prices)
 
-	// 2. Crear directorio temporal
 	tempDir := filepath.Join(uploadDir, "temp_stock")
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		sendError(w, "No se pudo crear directorio temporal: "+err.Error(), http.StatusInternalServerError)
@@ -158,7 +155,6 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// 3. Construir CSV con pares (Close(t), Close(t+1))
 	csvBase := symbol + ".csv"
 	jsonBase := symbol + ".json"
 	csvPath := filepath.Join(tempDir, csvBase)
@@ -174,7 +170,6 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	f.Close()
 
-	// 4. Ejecutar binario Ch05_01 (genera JSON y benchmark_ls.csv)
 	absBin, err := filepath.Abs(cppLSBinary)
 	if err != nil {
 		sendError(w, "Error resolviendo ruta del binario: "+err.Error(), http.StatusInternalServerError)
@@ -183,13 +178,12 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	cmd := exec.Command(absBin, csvBase, jsonBase)
 	cmd.Dir = tempDir
 	output, err := cmd.CombinedOutput()
-	log.Printf("Salida de Ch05_01 para %s:\n%s", symbol, output)
+	log.Printf("Salida de demo_02 para %s:\n%s", symbol, output)
 	if err != nil {
 		sendError(w, fmt.Sprintf("Error ejecutando regresión: %v\n%s", err, output), http.StatusInternalServerError)
 		return
 	}
 
-	// 5. Leer JSON de predicción
 	jsonData, err := os.ReadFile(jsonPath)
 	if err != nil {
 		sendError(w, "No se pudo leer el JSON de resultados: "+err.Error(), http.StatusInternalServerError)
@@ -201,19 +195,17 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6. Leer CSV de benchmark de regresión (benchmark_ls.csv)
-	benchPath := filepath.Join(tempDir, "benchmark_ls.csv")
+	benchPath := filepath.Join(tempDir, benchmarkLS)
 	var cppTimesReg, avxTimesReg []float64
 	if _, err := os.Stat(benchPath); err == nil {
 		cppTimesReg, avxTimesReg, err = readBenchmarkCSV(benchPath)
 		if err != nil {
-			log.Printf("Error leyendo benchmark_ls.csv: %v", err)
+			log.Printf("Error leyendo %s: %v", benchmarkLS, err)
 		}
 	} else {
-		log.Printf("No se encontró benchmark_ls.csv en %s", benchPath)
+		log.Printf("No se encontró %s en %s", benchmarkLS, benchPath)
 	}
 
-	// 7. Calcular predicción para el día siguiente
 	actualRaw, ok := regResult["actualPrices"].([]interface{})
 	if !ok || len(actualRaw) == 0 {
 		sendError(w, "Formato de resultado inválido", http.StatusInternalServerError)
@@ -229,23 +221,21 @@ func predictHandler(w http.ResponseWriter, r *http.Request) {
 	prediction := intercept + slope*lastPrice
 	rSquared, _ := regResult["rSquared"].(float64)
 
-	// 8. Respuesta al frontend (incluyendo dataPoints)
 	response := map[string]interface{}{
-		"prediction":     prediction,
-		"slope":          slope,
-		"intercept":      intercept,
-		"rSquared":       rSquared,
-		"actualPrices":   actualPrices,
-		"fittedPrices":   regResult["fittedPrices"],
-		"cppTimesReg":    cppTimesReg,
-		"avxTimesReg":    avxTimesReg,
-		"dataPoints":     dataPoints,
+		"prediction":    prediction,
+		"slope":         slope,
+		"intercept":     intercept,
+		"rSquared":      rSquared,
+		"actualPrices":  actualPrices,
+		"fittedPrices":  regResult["fittedPrices"],
+		"cppTimesReg":   cppTimesReg,
+		"avxTimesReg":   avxTimesReg,
+		"dataPoints":    dataPoints,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// readBenchmarkCSV lee CSV de dos columnas (C++, AVX2) y devuelve slices de float64.
 func readBenchmarkCSV(filePath string) ([]float64, []float64, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -275,7 +265,6 @@ func readBenchmarkCSV(filePath string) ([]float64, []float64, error) {
 	return cpp, avx, nil
 }
 
-// computeStatsFromArrays calcula media, desviación, min, max a partir de los arrays de tiempos.
 func computeStatsFromArrays(cppTimes, avxTimes []float64) map[string]interface{} {
 	if len(cppTimes) == 0 || len(avxTimes) == 0 {
 		return map[string]interface{}{
@@ -283,7 +272,6 @@ func computeStatsFromArrays(cppTimes, avxTimes []float64) map[string]interface{}
 			"avx": map[string]float64{"mean": 0, "std": 0, "min": 0, "max": 0},
 		}
 	}
-	// C++
 	sumCpp := 0.0
 	minCpp, maxCpp := cppTimes[0], cppTimes[0]
 	for _, v := range cppTimes {
@@ -303,7 +291,6 @@ func computeStatsFromArrays(cppTimes, avxTimes []float64) map[string]interface{}
 	}
 	stdCpp := varCpp / float64(len(cppTimes))
 
-	// AVX2
 	sumAvx := 0.0
 	minAvx, maxAvx := avxTimes[0], avxTimes[0]
 	for _, v := range avxTimes {
@@ -329,17 +316,12 @@ func computeStatsFromArrays(cppTimes, avxTimes []float64) map[string]interface{}
 	}
 }
 
-// fetchYahooPrices descarga precios de cierre ajustados.
-// days > 0: últimos N días hábiles (aproximado)
-// days == 0: máximo histórico posible (desde 1980)
 func fetchYahooPrices(symbol string, days int) ([]float64, error) {
 	var period1 int64
 	if days <= 0 {
-		// Máximo histórico: desde 1980-01-01
 		start := time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
 		period1 = start.Unix()
 	} else {
-		// Se añade un margen de 20 días para compensar fines de semana y feriados
 		start := time.Now().AddDate(0, 0, -days-20)
 		period1 = start.Unix()
 	}
@@ -395,14 +377,12 @@ func fetchYahooPrices(symbol string, days int) ([]float64, error) {
 	if len(prices) < 2 {
 		return nil, fmt.Errorf("solo %d precios válidos (necesarios 2+)", len(prices))
 	}
-	// Si se pidió un número específico de días, limitar a los últimos 'days'
 	if days > 0 && len(prices) > days {
 		prices = prices[len(prices)-days:]
 	}
 	return prices, nil
 }
 
-// imageToBase64 convierte una imagen a base64.
 func imageToBase64(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -411,21 +391,18 @@ func imageToBase64(path string) (string, error) {
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
-// sendError envía mensaje de error en JSON.
 func sendError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// cpuHandler devuelve el modelo del procesador.
 func cpuHandler(w http.ResponseWriter, r *http.Request) {
 	model := getCPUModel()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"model": model})
 }
 
-// getCPUModel obtiene el nombre del procesador (Linux/macOS).
 func getCPUModel() string {
 	if runtime.GOOS == "linux" {
 		data, err := os.ReadFile("/proc/cpuinfo")

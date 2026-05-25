@@ -1,9 +1,5 @@
-//------------------------------------------------
-//               Ch05_01_misc.cpp
-//------------------------------------------------
-
 #include "AlignedMem.h"
-#include "Ch05_01.h"
+#include "Demo_02.h"
 #include "MT.h"
 #include <cmath>
 

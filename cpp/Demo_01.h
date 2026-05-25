@@ -22,11 +22,11 @@ extern void ThresholdImage_Iavx2(ITD *itd);
 extern void CalcImageMean_Cpp(ITD *itd);
 extern void CalcImageMean_Iavx2(ITD *itd);
 
-// Ch04_06_misc.cpp
+// Demo_01_misc.cpp
 extern bool CheckArgs(size_t num_pixels, const uint8_t *pb_src,
                       const uint8_t *pb_mask);
 
-// Ch04_06_bm.cpp
+// Demo_01_bm.cpp
 extern void ProcessImage_bm(void);
 
 // Miscellaneous constants
